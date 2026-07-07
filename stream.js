@@ -43,10 +43,7 @@ const FORCE_REFRESH_MS = FORCE_REFRESH_MINUTES * 60 * 1000;
 const NO_REFRESH_DOMAINS = [
     'youtube.com',
     'facebook.com',
-    'streamed.pk',
-    'cricstreams.org', // crichd
-    'website-vercel-helper-d-jaja-3-2.vercel.app',
-    'websitestream.netlify.app/?ch=Channel%20HD%2071'
+    'streamed.pk'
 ];
 
 // 🚀 Multi-Stream Key Manager
@@ -149,19 +146,24 @@ async function setupNetworkAdBlocker(page) {
             const url = request.url().toLowerCase();
             const type = request.resourceType();
 
+            // 🚫 SHIELD: Same-Tab Hostile Redirect Hijacking Block
             if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
-                const targetUrl = request.url().toLowerCase();
-                
-                const adKeywords = ['popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 'fanduel', 'bet', 'casino'];
-                const isMaliciousAd = adKeywords.some(keyword => targetUrl.includes(keyword));
+                const targetUrl = request.url();
+                const isAllowed = urlList.some(u => {
+                    try {
+                        const host = new URL(u).hostname.replace('www.', '');
+                        return targetUrl.toLowerCase().includes(host);
+                    } catch(e) { return true; }
+                }) || targetUrl === 'about:blank' || targetUrl.startsWith('data:');
 
-                if (isMaliciousAd) {
+                if (!isAllowed) {
                     console.log(`[🛡️] NAVIGATION SHIELD: Blocked malicious ad redirection to -> ${targetUrl.substring(0, 70)}...`);
                     request.abort().catch(()=>{});
                     return;
                 }
             }
 
+            // Strict Ad Infrastructure Block list
             if (
                 url.includes('popads') || 
                 url.includes('exoclick') || 
@@ -185,11 +187,13 @@ async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
         await page.evaluateOnNewDocument(() => {
+            // Permanent root execution block for popup alerts & confirms
             window.alert = function() {};
             window.confirm = function() { return true; };
             window.prompt = function() { return null; };
             window.open = function() { return null; };
             
+            // 🚫 ANTI-DIALOG FIX (image_f565fe.jpg): Neutralize onbeforeunload modal box popup completely
             Object.defineProperty(window, 'onbeforeunload', {
                 configurable: true,
                 get: function() { return null; },
@@ -209,7 +213,44 @@ async function applyPreloadFirewall(page) {
                 }
             }, true);
 
-            // Removed Debug Mode Overlay styling injection completely
+            const style = document.createElement('style');
+            style.textContent = `html, body { background-color: #000000 !important; overflow: hidden !important; }`;
+            document.documentElement.appendChild(style);
+
+            const attachOverlay = () => {
+                let target = document.body || document.documentElement;
+                if (target && !document.getElementById('smart-stream-overlay')) {
+                    const overlay = document.createElement('div');
+                    overlay.id = 'smart-stream-overlay';
+                    overlay.innerHTML = `
+                        <style>
+                            #smart-stream-overlay {
+                                position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+                                width: 100vw !important; height: 100vh !important; background: #000000 !important;
+                                z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
+                                justify-content: center !important; align-items: center !important; color: #ffffff !important;
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+                                pointer-events: all !important;
+                            }
+                            .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
+                            .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
+                            .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                            @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                            @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
+                            .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
+                            .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
+                        </style>
+                        <div class="stream-spinner"></div>
+                        <div class="progress-container"><div class="progress-bar-fill"></div></div>
+                        <div class="stream-title">STREAM LOADING</div>
+                        <div class="stream-sub">Connecting to secure stream engine...</div>
+                    `;
+                    target.appendChild(overlay);
+                } else if (!target) {
+                    requestAnimationFrame(attachOverlay);
+                }
+            };
+            attachOverlay();
         });
     } catch (e) {
         console.log(`[🛡️] SYSTEM SHIELD: Preload firewall safe injection caught an error.`);
@@ -245,13 +286,67 @@ async function takeAndBatchScreenshot(page, stepName) {
 }
 
 async function showLoadingUI(page, title, sub) {
-    // ❌ REMOVED: Bypassed visual overlay to show real page errors/content.
-    console.log(`[DEBUG UI BYPASSED] Overlay request blocked: ${title} - ${sub}`);
+    try {
+        await page.evaluate((t, s) => {
+            if (window.self !== window.top) return; 
+            let overlay = document.getElementById('smart-stream-overlay');
+
+            if (overlay) {
+                const titleEl = overlay.querySelector('.stream-title');
+                const subEl = overlay.querySelector('.stream-sub');
+                if (titleEl) titleEl.innerHTML = t;
+                if (subEl) subEl.innerHTML = s;
+                
+                overlay.style.setProperty('display', 'flex', 'important');
+                overlay.style.setProperty('opacity', '1', 'important');
+                overlay.style.setProperty('z-index', '2147483647', 'important');
+            } 
+            else {
+                overlay = document.createElement('div');
+                overlay.id = 'smart-stream-overlay';
+                overlay.innerHTML = `
+                    <style>
+                        #smart-stream-overlay {
+                            position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+                            width: 100vw !important; height: 100vh !important; background: #000000 !important;
+                            z-index: 2147483647 !important; display: flex !important; flex-direction: column !important;
+                            justify-content: center !important; align-items: center !important; color: #ffffff !important;
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+                            pointer-events: all !important;
+                        }
+                        .stream-spinner { width: 80px; height: 80px; border: 6px solid rgba(255, 255, 255, 0.1); border-top: 6px solid #e50914; border-radius: 50%; animation: spin-overlay 1s linear infinite; margin-bottom: 25px; box-shadow: 0 0 25px rgba(229, 9, 20, 0.4); }
+                        .progress-container { width: 300px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 30px; overflow: hidden; position: relative; }
+                        .progress-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #e50914, #ff4d4d); position: absolute; left: -100%; animation: shift-progress 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        @keyframes spin-overlay { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                        @keyframes shift-progress { 0% { left: -100%; } 50% { left: 0; } 100% { left: 100%; } }
+                        .stream-title { font-size: 36px !important; font-weight: 800 !important; letter-spacing: 3px !important; margin-bottom: 15px !important; text-transform: uppercase !important; text-shadow: 0px 4px 10px rgba(0,0,0,0.8) !important; }
+                        .stream-sub { font-size: 20px !important; color: #cccccc !important; text-align: center !important; line-height: 1.6 !important; }
+                        .stream-blink { animation: blinker 1.5s linear infinite; color: #e50914; font-weight: bold; }
+                        @keyframes blinker { 50% { opacity: 0.3; } }
+                    </style>
+                    <div class="stream-spinner"></div>
+                    <div class="progress-container"><div class="progress-bar-fill"></div></div>
+                    <div class="stream-title">${t}</div>
+                    <div class="stream-sub">${s}</div>
+                `;
+                document.documentElement.appendChild(overlay);
+            }
+        }, title, sub);
+    } catch (e) {}
 }
 
 async function hideLoadingUI(page) {
-    // ❌ REMOVED: Bypassed hide overlay trigger.
-    console.log(`[DEBUG UI BYPASSED] Hide Overlay Triggered`);
+    try {
+        await page.evaluate(() => {
+            const overlay = document.getElementById('smart-stream-overlay');
+            if (overlay) {
+                overlay.style.setProperty('display', 'none', 'important');
+                overlay.style.setProperty('opacity', '0', 'important');
+                overlay.style.setProperty('z-index', '-9999', 'important');
+                overlay.remove();
+            }
+        });
+    } catch (e) {}
 }
 
 function setupOBSConfig() {
@@ -312,6 +407,7 @@ x264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0
 
 function attachAntiAdListeners(page) {
     page.on('dialog', async dialog => {
+        // Safe check for unexpected alerts trying to freeze execution threads
         try { await dialog.dismiss(); } catch(e){}
     });
 }
@@ -433,7 +529,10 @@ async function initializeVideo(page, startMuted, isActivePage) {
         await page.evaluate(() => {
             setInterval(() => {
                 try {
-                    // Removed forced black background on body so debug mode is clear
+                    document.documentElement.style.setProperty('background-color', 'black', 'important');
+                    document.body.style.setProperty('background-color', 'black', 'important');
+                    document.body.style.setProperty('overflow', 'hidden', 'important');
+                    document.documentElement.style.setProperty('overflow', 'hidden', 'important');
 
                     let iframes = Array.from(document.querySelectorAll('iframe'));
                     let mainIframe = null; let maxArea = 0;
@@ -465,12 +564,14 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         mainIframe.style.setProperty('width', '100vw', 'important');
                         mainIframe.style.setProperty('height', '100vh', 'important');
                         mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
+                        mainIframe.style.setProperty('background-color', 'black', 'important');
                         mainIframe.style.setProperty('border', 'none', 'important');
                         mainIframe.style.setProperty('opacity', '1', 'important');
                         mainIframe.style.setProperty('display', 'block', 'important');
                         mainIframe.style.setProperty('visibility', 'visible', 'important');
                     }
 
+                    // Strict Dynamic DOM Target Block
                     const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
                     document.querySelectorAll(junkClasses).forEach(el => { 
                         try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
@@ -532,7 +633,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         realVideo.style.setProperty('width', '100vw', 'important');
                         realVideo.style.setProperty('height', '100vh', 'important');
                         realVideo.style.setProperty('z-index', '2147483646', 'important'); 
-                        // Debug Mode: Replaced forced black background so you can debug easier
+                        realVideo.style.setProperty('background-color', 'black', 'important');
                         realVideo.style.setProperty('object-fit', 'contain', 'important');
                         realVideo.style.setProperty('opacity', '1', 'important');
                         realVideo.style.setProperty('visibility', 'visible', 'important');
@@ -636,6 +737,7 @@ async function startWatchdog() {
         }
 
         if (activeStatus.status === 'HEALTHY') {
+            // FIXED: Removed invalid page.setMuted()
             await hideLoadingUI(activePage); 
             isWarmupPhase = false; 
 
@@ -667,7 +769,9 @@ async function startWatchdog() {
             }
         }
 
+        // 🔊 ENFORCED BROWSER LEVEL MUTING: Keeps background layers completely quiet
         if (backupPage) {
+            // FIXED: Removed invalid backupPage.setMuted()
             for (const frame of backupPage.frames()) {
                 try {
                     if (!frame.isDetached()) {
@@ -729,6 +833,8 @@ async function startWatchdog() {
 
             if (backupStatus.status === 'HEALTHY' || backupStatus.status === 'DEAD') { 
                 
+                // FIXED: Removed invalid activePage.setMuted() and backupPage.setMuted() cross-muting calls
+
                 if (!isProactiveRefresh) {
                     for (const frame of activePage.frames()) {
                         try { if (!frame.isDetached()) await frame.evaluate(() => { document.querySelectorAll('video, audio').forEach(m => { m.muted = true; m.volume = 0.0; }); }); } catch(e) {}
@@ -842,10 +948,7 @@ async function startDirectStreaming() {
         '--disable-features=Translate,BlinkGenPropertyTrees,CalculateNativeWinOcclusion',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        
-        `--disable-extensions-except=${path.join(process.cwd(), 'ublock-lite')}`,
-        `--load-extension=${path.join(process.cwd(), 'ublock-lite')}`
+        '--disable-renderer-backgrounding'
     ];
 
     if (PROXY_ENGINE.includes('Cloudflare')) {
@@ -878,6 +981,8 @@ async function startDirectStreaming() {
     activePage = pages[0]; 
     backupPage = await browser.newPage();
     
+    // FIXED: Removed invalid page.setMuted() calls here
+
     await setupNetworkAdBlocker(activePage);
     await setupNetworkAdBlocker(backupPage);
 
