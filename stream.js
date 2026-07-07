@@ -149,11 +149,11 @@ async function setupNetworkAdBlocker(page) {
             const url = request.url().toLowerCase();
             const type = request.resourceType();
 
-            // 🚫 SHIELD: Same-Tab Hostile Redirect Hijacking Block
+            // 🚫 SHIELD: Same-Tab Hostile Redirect Hijacking Block (FIXED)
             if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
                 const targetUrl = request.url().toLowerCase();
                 
-                // Normal streaming redirects (dlhd.pk -> dlhd.st) ko allow karenge
+                // Hum sirf known AD networks ko block karenge, normal streaming redirects (dlhd.pk -> dlhd.st) ko allow karenge
                 const adKeywords = ['popads', 'exoclick', 'adsterra', 'onclickads', 'jerkmate', 'adrevenue', 'fanduel', 'bet', 'casino'];
                 const isMaliciousAd = adKeywords.some(keyword => targetUrl.includes(keyword));
 
@@ -162,6 +162,7 @@ async function setupNetworkAdBlocker(page) {
                     request.abort().catch(()=>{});
                     return;
                 }
+                // Agar koi normal redirect hai toh usay block mat karo, chalne do
             }
 
             // Strict Ad Infrastructure Block list
@@ -184,6 +185,9 @@ async function setupNetworkAdBlocker(page) {
     } catch (e) { console.log('[⚠️] Request interception setup failed.'); }
 }
 
+// =========================================================================================
+// 🛡️ PRELOAD FIREWALL (UPDATED: DEBUG MODE - NO OVERLAYS)
+// =========================================================================================
 async function applyPreloadFirewall(page) {
     if (!page) return;
     try {
@@ -214,8 +218,7 @@ async function applyPreloadFirewall(page) {
                 }
             }, true);
 
-            // ⚠️ DEBUG FIX: Removed 'background-color: #000000' and 'overflow: hidden' to see actual site behavior.
-            // ⚠️ DEBUG FIX: Removed 'attachOverlay()' function injection.
+            // ❌ DEBUG MODE: Custom overlay aur forced styles yahan se saaf kar diye hain taake raw page visible rahe.
         });
     } catch (e) {
         console.log(`[🛡️] SYSTEM SHIELD: Preload firewall safe injection caught an error.`);
@@ -245,24 +248,22 @@ async function takeAndBatchScreenshot(page, stepName) {
                     if (!err) uploadCycleCount++;
                 });
                 pendingScreenshots = []; 
-            } catch (err) { }
+            } catch (err) { {} }
         }
-    } catch (e) { }
+    } catch (e) { {} }
 }
 
+// =========================================================================================
+// ⏱️ UI FUNCTIONS (BYPASSED FOR DEBUGGING)
+// =========================================================================================
 async function showLoadingUI(page, title, sub) {
-    // ⚠️ DEBUG FIX: Instead of injecting overlay HTML, just log it.
-    console.log(`[UI STATUS]: ${title} - ${sub}`);
+    // ❌ REMOVED: Black Loading Overlay injection logic bypass kar di hai.
+    console.log(`[DEBUG UI BYPASSED] Overlay blocked: ${title} - ${sub}`);
 }
 
 async function hideLoadingUI(page) {
-    // ⚠️ DEBUG FIX: Safely remove overlay if it was somehow injected
-    try {
-        await page.evaluate(() => {
-            const overlay = document.getElementById('smart-stream-overlay');
-            if (overlay) overlay.remove();
-        });
-    } catch (e) {}
+    // ❌ REMOVED: Kuch inject hi nahi ho raha toh remove karne ki zaroorat nahi.
+    console.log(`[DEBUG UI] Overlay Hide Triggered`);
 }
 
 function setupOBSConfig() {
@@ -323,7 +324,6 @@ x264Settings=keyint=60 tune=zerolatency profile=main threads=4 rc-lookahead=0
 
 function attachAntiAdListeners(page) {
     page.on('dialog', async dialog => {
-        // Safe check for unexpected alerts trying to freeze execution threads
         try { await dialog.dismiss(); } catch(e){}
     });
 }
@@ -445,8 +445,7 @@ async function initializeVideo(page, startMuted, isActivePage) {
         await page.evaluate(() => {
             setInterval(() => {
                 try {
-                    // ⚠️ DEBUG FIX: Background coloring commands have been removed here.
-
+                    // Hum sirf layout handle karenge, background overlay forced nahi lagayenge debug mode mein
                     let iframes = Array.from(document.querySelectorAll('iframe'));
                     let mainIframe = null; let maxArea = 0;
 
@@ -462,7 +461,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         );
                     }
 
-                    // Original styling for bringing iframe front and center is retained.
                     if (mainIframe) {
                         iframes.forEach(ifr => {
                             if (ifr !== mainIframe) {
@@ -478,14 +476,13 @@ async function initializeVideo(page, startMuted, isActivePage) {
                         mainIframe.style.setProperty('width', '100vw', 'important');
                         mainIframe.style.setProperty('height', '100vh', 'important');
                         mainIframe.style.setProperty('z-index', '2147483645', 'important'); 
-                        // Removed 'background-color: black' here to maintain debug clarity.
                         mainIframe.style.setProperty('border', 'none', 'important');
                         mainIframe.style.setProperty('opacity', '1', 'important');
                         mainIframe.style.setProperty('display', 'block', 'important');
                         mainIframe.style.setProperty('visibility', 'visible', 'important');
                     }
 
-                    // Strict Dynamic DOM Target Block is KEPT intact so unwanted UI panels don't break the layout.
+                    // Dynamic Junk ad containers removal
                     const junkClasses = '.chat, #chat, header, footer, .sidebar, .banner, .ads, [class*="overlay"]:not(#smart-stream-overlay), [id*="pop"], [class*="pop"], a[href*="extension"], [class*="notification"], [id*="notification"]';
                     document.querySelectorAll(junkClasses).forEach(el => { 
                         try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); } 
@@ -512,7 +509,6 @@ async function initializeVideo(page, startMuted, isActivePage) {
             }, 500); 
         }).catch(() => {});
 
-        // This properly closes the block that was cut-off in your original request.
         await targetFrame.evaluate((muteVideo) => {
             setInterval(() => {
                 try {
@@ -521,12 +517,15 @@ async function initializeVideo(page, startMuted, isActivePage) {
                     document.head.appendChild(style);
 
                     const mediaElements = document.querySelectorAll('video, audio');
-                    const videos = Array.from(document.querySelectorAll('video'));
-                } catch(e) {}
+                    mediaElements.forEach(media => {
+                        media.muted = false;
+                        media.volume = 1.0;
+                    });
+                } catch (err) {}
             }, 500);
-        });
+        }, startMuted);
 
     } catch (e) {
-        console.log(`[⚠️] Video initialization issue: ${e.message}`);
+        console.log(`[⚠️] Video target injection failed.`);
     }
 }
